@@ -1,19 +1,3 @@
-from django.contrib import messages
-from django.shortcuts import render, get_object_or_404, redirect
-from django.core.exceptions import ObjectDoesNotExist
-from django.http import HttpResponseRedirect, HttpResponse
-from django.views.generic import ListView, DetailView, View
-from django.views.generic.edit import UpdateView, CreateView, DeleteView
-from django.db.models.signals import pre_save
-from django.utils import timezone
-from django.contrib.auth.mixins import LoginRequiredMixin
-from django.views.generic.edit import FormMixin, ModelFormMixin
-from django.utils.text import slugify
-from django.shortcuts import reverse
-from django.urls import reverse_lazy
-from .forms import *
-
-
 from dashboard.models import *
 from dashboard.serializers import CarparkSerializers, UnparkSerializers, InformationSerializer
 from django.http import Http404
@@ -28,40 +12,12 @@ from rest_framework.views import exception_handler
 from rest_framework.exceptions import Throttled
 
 from dashboard import config
-
-import time
+import threading
+import datetime, time
 # Create your views here.
 
-class IndexView(CreateView):
-    template_name = 'main.html'
-    model = carPark
-    form_class = CarParkForm
-
-    def get(self, *args, **kwargs):
-        form = CarParkForm()
-        return render(self.request, 'main.html', {'form': form})
-
-    def post(self, *args, **kwargs):
-        form = CarParkForm(self.request.POST, self.request.FILES or None)
-        if form.is_valid():
-            car_no = form.cleaned_data['car_no']
-            post = carPark(
-                car_no=car_no
-            )
-            obj = post.save()
-            return redirect('index')
-        return render(self.request, 'main.html')
-
-
-@api_view(['GET'])
-def api_root(request, format=None):
-    return Response({
-        'Park': reverse('cars', request=request, format=format),
-        'Info': reverse('info', request=request, format=format),
-    })
-
-    
-
+ 
+# IP ADDRESS GET
 def get_client_ip(request):
     x_forwarded_for = request.META.get('HTTP_X_FORWARDED_FOR')
     if x_forwarded_for:
@@ -70,53 +26,30 @@ def get_client_ip(request):
         ip = request.META.get('REMOTE_ADDR')
     return ip
 
-# rate limit hobe tokhon jokhon time 10s == request 10ta:
-# from rest_framework.response import Response
-# from rest_framework.throttling import UserRateThrottle
-# from rest_framework.views import APIView
-
-# class ExampleView(APIView):
-#     throttle_classes = [UserRateThrottle]
-
-#     def get(self, request, format=None):
-#         content = {
-#             'status': 'request was permitted'
-#         }
-#         return Response(content)
-
-def rate_limit(request):
-    customer_ip = get_client_ip(request)
-    rate_limit = 10
-    
-    # new_limit = []
-    if request.method == "GET":
-        pass
-    return customer_ip
-
-
+# CASE 1
 class CarparkList(APIView):
     serializer_class = CarparkSerializers
     
-
+    # get
     def get(self, request, format=None):
         cars = carPark.objects.all()
-        print(rate_limit(request))
         serializer = CarparkSerializers(cars, many=True)
         return Response(serializer.data)
-        
+    
+    # post
     def post(self, request, *args, **kwargs):
-        c = carPark.objects.all()
-        ip = [a.ip_adress for a in c]
-        full_slot = [a.slot_no for a in c]
+        carpark = carPark.objects.all()
+        ip = [ip.ip_adress for ip in carpark]
+        full_slot = [slot.slot_no for slot in carpark]
         total_space = [i for i in range(1, 9)]
         data = {
             'car_no': request.data.get('car_no'),
         }
         serializer = CarparkSerializers(data=data)
-        d = len(c) + 1
+        vaccancy = len(carpark) + 1
         if serializer.is_valid():
             current_ip = get_client_ip(request)
-            if d == 6:
+            if vaccancy > config.TOTAL_VACCANCY: # if you want more vaccancy change dashboard/config file TOTAL_VACANCY
                 return Response({
                     'message': 'All Slot Are Blocked'
                 }, status=status.HTTP_400_BAD_REQUEST)
@@ -126,15 +59,17 @@ class CarparkList(APIView):
                 }, status=status.HTTP_400_BAD_REQUEST)
             else:
                 obj = serializer.save() 
-                obj.slot_no = len(c) + 1
+                obj.slot_no = len(carpark) + 1
                 obj.ip_adress = current_ip
                 if obj.slot_no in full_slot:
-                    space_slot = [b for b in total_space if b not in full_slot]
+                    space_slot = [sep_slot for sep_slot in total_space if sep_slot not in full_slot]
                     obj.slot_no = space_slot[0]
                 obj.save()
                 return Response(serializer.data, status=status.HTTP_201_CREATED)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
+
+# CASE 2:
 class UnparkList(APIView):
     serializer_class = CarparkSerializers
 
@@ -161,35 +96,37 @@ class UnparkList(APIView):
                 'message': 'Input Your Correct Slot No'
             }, status=status.HTTP_400_BAD_REQUEST)
 
+
+# CASE 3:
 class InfoCar(APIView):
     serializer_class = InformationSerializer
 
     def get(self, request, format=None):
         cars = Information.objects.all()
-        z = [car.slot_no for car in cars]
-        j = [car.car_no for car in cars]
-        if len(z) == 0 or len(j) == 0:
+        slots = [car.slot_no for car in cars]
+        car_nos = [car.car_no for car in cars]
+        if len(slots) == 0 or len(car_nos) == 0:
             return Response({
                 "message": "Type Car No Or Slot No"
             }, status=status.HTTP_400_BAD_REQUEST)
         else:
-            info = carPark.objects.filter(slot_no=z[-1]) or carPark.objects.filter(car_no=j[-1]) 
+            info = carPark.objects.filter(slot_no=slots[-1]) or carPark.objects.filter(car_no=car_nos[-1]) 
             serializer = InformationSerializer(info, many=True)
             return Response(serializer.data)
 
     def post(self, request, *args, **kwargs):
         cars = carPark.objects.all()
-        z = [car.slot_no for car in cars]
-        j = [car.car_no for car in cars]
+        slots = [car.slot_no for car in cars]
+        car_nos = [car.car_no for car in cars]
         data = {}
         serializer = InformationSerializer(data=request.data)
         if serializer.is_valid():
             serializer.save()
-        if (serializer.data['car_no']) not in j and (serializer.data['slot_no'])==None:
+        if (serializer.data['car_no']) not in car_nos and (serializer.data['slot_no'])==None:
             return Response({
                 'message': 'Your Car is not parked or type correct Car No'
             })
-        elif (serializer.data['slot_no']) not in z and (serializer.data['car_no'])==None:
+        elif (serializer.data['slot_no']) not in slots and (serializer.data['car_no'])==None:
             return Response({
                 'message': 'Your Car is not parked or type correct Slot No'
             })
@@ -200,3 +137,33 @@ class InfoCar(APIView):
             return Response(data)
             return Response(serializer.data, status=status.HTTP_201_CREATED)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+@api_view(['GET'])
+def api_root(request, format=None):
+    start_time = datetime.datetime.now()
+    customer_ip = get_client_ip(request)
+    count_ip = []
+    check_count = [ip.ip_adress for ip in Rate.objects.all()]
+    for your_ip in check_count:
+        if customer_ip == your_ip:
+            count_ip.append(your_ip)
+
+    if request.method == "GET":
+        if len(count_ip) < config.RATE_LIMIT: # if want to change request limit change dashboard/config RATE_LIMIT
+            rate_limit = Rate.objects.create()
+            rate_limit.ip_adress = customer_ip
+            time_diff = (datetime.datetime.now() - start_time).total_seconds()
+            rate_limit.time_field = time_diff
+            rate_limit.save()
+            return Response({
+                'Park': reverse('cars', request=request, format=format),
+                'Info': reverse('info', request=request, format=format),
+            })
+        else:
+            del_rate = Rate.objects.filter(ip_adress=customer_ip)
+            del_rate.delete()
+            time.sleep(5)
+            return Response({
+                'message': f'You were blocked for 5 seconds'
+            }, status=status.HTTP_400_BAD_REQUEST)

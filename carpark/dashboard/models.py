@@ -36,3 +36,8 @@ class Information(models.Model):
 
 class Rate(models.Model):
     visit = models.PositiveIntegerField(default=0)
+    ip_adress = models.GenericIPAddressField(null=True)
+    time_field = models.FloatField(null=True)
+
+    def __str__(self):
+        return f"{self.ip_adress}"
