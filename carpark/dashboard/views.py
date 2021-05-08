@@ -32,9 +32,16 @@ class CarparkList(APIView):
     
     # get
     def get(self, request, format=None):
+        data = []
         cars = carPark.objects.all()
         serializer = CarparkSerializers(cars, many=True)
-        return Response(serializer.data)
+        # print(serializer.data[0]['car_no'])
+        for i in range(len(cars)):
+            data.append({
+                'car_no': serializer.data[i]['car_no'],
+                'slot_no': serializer.data[i]['slot_no']
+            })
+        return Response(data)
     
     # post
     def post(self, request, *args, **kwargs):
@@ -79,10 +86,15 @@ class UnparkList(APIView):
         except carPark.DoesNotExist:
             raise Http404
     def get(self, request, slot_no, format=None):
+        data = []
         check_item = self.get_object(slot_no)
         serializer = self.serializer_class(check_item)
         serializer_data = serializer.data
-        return Response(serializer_data, status=status.HTTP_200_OK)
+        data.append({
+            'car_no': serializer_data['car_no'],
+            'slot_no': serializer_data['slot_no']
+        })
+        return Response(data, status=status.HTTP_200_OK)
 
     def delete(self, request, slot_no, format=None):
         event = self.get_object(slot_no)
@@ -125,11 +137,11 @@ class InfoCar(APIView):
         if (serializer.data['car_no']) not in car_nos and (serializer.data['slot_no'])==None:
             return Response({
                 'message': 'Your Car is not parked or type correct Car No'
-            })
+            }, status=status.HTTP_400_BAD_REQUEST)
         elif (serializer.data['slot_no']) not in slots and (serializer.data['car_no'])==None:
             return Response({
                 'message': 'Your Car is not parked or type correct Slot No'
-            })
+            }, status=status.HTTP_400_BAD_REQUEST)
         else:
             data = {
                 'message': 'Found Click On Get'

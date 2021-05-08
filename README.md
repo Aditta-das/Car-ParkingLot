@@ -14,8 +14,11 @@ pip install -r requirements.txt
 Step 3:
 ```
 cd carpark
-
+python manage.py makemigrations
+python manage.py migrate
+python manage.py createsuperuser
 python manage.py runserver
+ 
 ```
 Step 4:
 ```
@@ -34,7 +37,6 @@ You will get those links
     {
         "car_no": "BMX12341234",
         "slot_no": 1,
-        "ip_adress": "127.0.0.1"
     }
 ```
 
@@ -58,6 +60,11 @@ You will get those links
     {
         "car_no": "BMX12341234",
         "slot_no": 1
+    }
+    
+    ## If you put incorrect car number or slot number
+    {
+        "message": "Your Car is not parked or type correct Car No"
     }
 ```
 

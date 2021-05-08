@@ -15,15 +15,6 @@ class carPark(models.Model):
         return f"car number {self.car_no}"    
 
 
-class Unpark(models.Model):
-    slot_no = models.IntegerField(
-        null=True,
-        validators=[
-            MaxValueValidator(8), 
-            MinValueValidator(1)
-            ]
-        )
-
 class Information(models.Model):
     car_no = models.CharField(null=True, max_length=20)
     slot_no = models.IntegerField(
