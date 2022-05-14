@@ -1,4 +1,4 @@
-# NASDAILY PARKING LOT Api Docs
+# PARKING LOT Api Docs
 
 Step 1:
 ```
